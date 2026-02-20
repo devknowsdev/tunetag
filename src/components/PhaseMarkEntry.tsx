@@ -255,73 +255,96 @@ export function PhaseMarkEntry({
   }, [narrative]);
 
   return (
-    <div className="mark-entry-overlay">
-      <div className="mark-entry-panel slide-up">
-        {/* Header */}
-        <div style={{ padding: '1.25rem 1.25rem 0' }}>
-          {draft.isDictated && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem',
-              padding: '0.375rem 0.625rem', background: 'var(--amber-bg)',
-              border: '1px solid var(--amber)', borderRadius: 'var(--radius)',
-            }}>
-              <span style={{ fontSize: '0.875rem' }}>🎙</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--amber)' }}>
-                DICTATED — transcript pre-filled below
-              </span>
-            </div>
-          )}
-
-          <p className="label" style={{ marginBottom: '0.25rem' }}>
-            {draft.mode === 'edit' ? 'EDIT SECTION' : 'NEW SECTION'}
-          </p>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {tsEditing ? (
-              <input
-                autoFocus
-                type="text"
-                value={tsRaw}
-                onChange={(e) => setTsRaw(e.target.value)}
-                onBlur={handleTsBlur}
-                onKeyDown={(e) => e.key === 'Enter' && handleTsBlur()}
-                style={{
-                  fontFamily: 'var(--font-mono)', fontSize: '2rem',
-                  color: timestampValid ? 'var(--amber)' : 'var(--error)',
-                  background: 'transparent',
-                  border: `1px solid ${timestampValid ? 'var(--border-active)' : 'var(--error)'}`,
-                  borderRadius: 'var(--radius)', width: '6rem', padding: '0.25rem',
-                }}
-              />
-            ) : (
-              <button
-                onClick={() => { setTsEditing(true); setTsRaw(timestamp); }}
-                style={{
-                  fontFamily: 'var(--font-mono)', fontSize: '2rem', color: 'var(--amber)',
-                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
-                }}
-                title="Click to edit timestamp"
-              >
-                {timestamp}
-              </button>
-            )}
-            <div style={{ display: 'flex', gap: '0.25rem' }}>
-              {[-5, -1, +1, +5].map((d) => (
-                <button key={d} className="nudge-btn" onClick={() => nudge(d)}>
-                  {d > 0 ? `+${d}s` : `${d}s`}
-                </button>
-              ))}
-            </div>
-          </div>
-          {!timestampValid && (
-            <p style={{ color: 'var(--error)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-              Use M:SS format
+    <div className="mark-entry-overlay" onClick={handleDiscard}>
+      <div className="mark-entry-panel slide-up" onClick={(e) => e.stopPropagation()}>
+        {/* Sticky header: label + timestamp + actions */}
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+          padding: '0.75rem 1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+        }}>
+          {/* Left: label + timestamp + nudge */}
+          <div style={{ minWidth: 0 }}>
+            <p className="label" style={{ marginBottom: '0.2rem' }}>
+              {draft.mode === 'edit' ? 'EDIT SECTION' : 'NEW SECTION'}
             </p>
-          )}
-          <p style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', marginTop: '0.25rem' }}>
-            Tap to correct timing
-          </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {tsEditing ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={tsRaw}
+                  onChange={(e) => setTsRaw(e.target.value)}
+                  onBlur={handleTsBlur}
+                  onKeyDown={(e) => e.key === 'Enter' && handleTsBlur()}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '1.75rem',
+                    color: timestampValid ? 'var(--amber)' : 'var(--error)',
+                    background: 'transparent',
+                    border: `1px solid ${timestampValid ? 'var(--border-active)' : 'var(--error)'}`,
+                    borderRadius: 'var(--radius)', width: '6rem', padding: '0.25rem',
+                  }}
+                />
+              ) : (
+                <button
+                  onClick={() => { setTsEditing(true); setTsRaw(timestamp); }}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '1.75rem', color: 'var(--amber)',
+                    background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                  }}
+                  title="Click to edit timestamp"
+                >
+                  {timestamp}
+                </button>
+              )}
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                {[-5, -1, +1, +5].map((d) => (
+                  <button key={d} className="nudge-btn" onClick={() => nudge(d)}>
+                    {d > 0 ? `+${d}s` : `${d}s`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {!timestampValid && (
+              <p style={{ color: 'var(--error)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: '0.125rem' }}>
+                Use M:SS format
+              </p>
+            )}
+          </div>
+
+          {/* Right: Discard + Save */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem', flexShrink: 0 }}>
+            <button className="btn-primary btn-small" disabled={!canSave} onClick={handleSave}>
+              SAVE
+            </button>
+            <button className="btn-ghost btn-destructive btn-small" onClick={handleDiscard}>
+              DISCARD
+            </button>
+            <span className="kbd-hint" style={{ marginTop: '0.125rem' }}>⌘↵ save · Esc discard</span>
+          </div>
         </div>
+
+        {/* Dictated badge (below header) */}
+        {draft.isDictated && (
+          <div style={{
+            margin: '0.75rem 1.25rem 0',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.375rem 0.625rem', background: 'var(--amber-bg)',
+            border: '1px solid var(--amber)', borderRadius: 'var(--radius)',
+          }}>
+            <span style={{ fontSize: '0.875rem' }}>🎙</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--amber)' }}>
+              DICTATED — transcript pre-filled below
+            </span>
+          </div>
+        )}
 
         {/* Section type */}
         <div style={{ padding: '1rem 1.25rem 0' }}>
@@ -475,16 +498,8 @@ export function PhaseMarkEntry({
           ))}
         </div>
 
-        {/* Actions */}
-        <div style={{ padding: '1rem 1.25rem 2rem', display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button className="btn-ghost btn-destructive" onClick={handleDiscard}>DISCARD</button>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span className="kbd-hint">⌘↵ to save</span>
-            <button className="btn-primary" disabled={!canSave} onClick={handleSave}>
-              SAVE SECTION
-            </button>
-          </div>
-        </div>
+        {/* Bottom padding so last field isn't flush against the player bar */}
+        <div style={{ height: '2rem' }} />
       </div>
     </div>
   );
