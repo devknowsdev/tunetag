@@ -151,7 +151,7 @@ export function lintAnnotation(annotation: TrackAnnotation): LintResult {
     issues.push({
       field: "THE 'WOW' FACTOR",
       severity: 'warning',
-      message: "Wow Factor seems brief — this is a critical field for BeatPulse",
+      message: "Wow Factor seems brief — this is a critical field for TuneTag",
       phase: 'global',
     });
   }
@@ -160,7 +160,7 @@ export function lintAnnotation(annotation: TrackAnnotation): LintResult {
     issues.push({
       field: 'Session Timer',
       severity: 'warning',
-      message: 'Session exceeded 30 minutes — BeatPulse recommends staying under 30',
+      message: 'Session exceeded 30 minutes — TuneTag recommends staying under 30',
       phase: 'listening',
     });
   }

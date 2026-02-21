@@ -13,7 +13,7 @@
 
 import { useState, useEffect } from 'react';
 
-export const MIC_DEVICE_KEY = 'beatpulse_mic_device';
+export const MIC_DEVICE_KEY = 'tunetag_mic_device';
 
 export interface UseAudioDevicesReturn {
   /** All available audio input devices. Empty until permission is granted. */

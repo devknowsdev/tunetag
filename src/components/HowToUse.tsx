@@ -61,7 +61,7 @@ export function HowToUse({ onClose }: HowToUseProps) {
         <button style={styles.closeBtn} onClick={onClose} aria-label="Close help">✕</button>
 
         <div style={styles.content}>
-          <p style={styles.mono as React.CSSProperties}>BEATPULSE — HOW TO USE</p>
+          <p style={styles.mono as React.CSSProperties}>TUNETAG — HOW TO USE</p>
           <p style={styles.body}>
             This tool helps you annotate music tracks. You work through each track in two parts.
           </p>

@@ -108,7 +108,7 @@ export function PhaseSelect({
 
       {/* ── HEADER ── */}
       <div style={{ marginBottom: '2rem', textAlign: 'center', padding: '1rem 0 0.5rem' }}>
-        <p className="label" style={{ marginBottom: '0.5rem' }}>BEATPULSE LABS</p>
+        <p className="label" style={{ marginBottom: '0.5rem' }}>TUNETAG</p>
         <h1 style={{
           fontFamily: 'var(--font-display)',
           fontSize: '2rem',

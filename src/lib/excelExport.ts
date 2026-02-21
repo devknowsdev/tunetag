@@ -104,7 +104,7 @@ export function downloadBlob(
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `BeatPulse_${annotatorName.replace(/\s+/g, '_')}_${Date.now()}.xlsx`;
+  a.download = `TuneTag_${annotatorName.replace(/\s+/g, '_')}_${Date.now()}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }

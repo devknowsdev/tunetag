@@ -17,8 +17,8 @@ import type {
 import { TRACKS } from '../lib/schema';
 import { BUILTIN_PACKS, BUILTIN_TAGS, DEFAULT_LIBRARY_STATE } from '../lib/tagPacks';
 
-const STORAGE_KEY = 'beatpulse_v1';
-const ANNOTATOR_KEY = 'beatpulse_annotator';
+const STORAGE_KEY = 'tunetag_v1';
+const ANNOTATOR_KEY = 'tunetag_annotator';
 const AUTOSAVE_DEBOUNCE_MS = 500;
 const UNDO_STACK_MAX = 100;
 

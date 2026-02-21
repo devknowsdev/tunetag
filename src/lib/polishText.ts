@@ -35,7 +35,7 @@ export async function polishText(
   roughText: string,
   context: PolishContext
 ): Promise<string> {
-  const apiKey = sessionStorage.getItem('beatpulse_api_key');
+  const apiKey = sessionStorage.getItem('tunetag_api_key');
   if (!apiKey) throw new PolishUnavailableError('No API key set');
 
   let userMessage: string;

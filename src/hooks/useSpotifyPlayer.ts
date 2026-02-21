@@ -84,7 +84,7 @@ export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
     playerCreatedRef.current = true;
 
     const player = new window.Spotify.Player({
-      name: 'BeatPulse Annotator',
+      name: 'TuneTag Annotator',
       volume: 0.8,
       getOAuthToken: (cb: (token: string) => void): void => {
         // Always use the latest token snapshot via closure over the ref below.

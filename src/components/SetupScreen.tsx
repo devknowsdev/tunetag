@@ -349,7 +349,7 @@ export default function SetupScreen({ onEnter }: SetupScreenProps) {
         {/* HERO */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
           <p className="label" style={{ color: 'var(--amber)', marginBottom: '0.5rem' }}>
-            BEATPULSE ANNOTATOR
+            TUNETAG ANNOTATOR
           </p>
           <h1 style={{
             fontSize: 'clamp(1.5rem, 4vw, 2rem)',
