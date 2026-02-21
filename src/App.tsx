@@ -1,7 +1,7 @@
 // FIX #1: Single timer source — useTimer lives ONLY here, props thread down.
 // FIX #2: resumeSavedState() returns snapshot; timer restore uses it directly.
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { TemplateState } from './types';
+import type { TemplateState, RecordingEntry } from './types';
 import { useAnnotationState } from './hooks/useAnnotationState';
 import { useTimer } from './hooks/useTimer';
 import { ApiKeyGate } from './components/ApiKeyGate';
@@ -49,6 +49,28 @@ function App() {
 
   // ── App state ──────────────────────────────────────────────────────────────
   const state = useAnnotationState();
+
+  // ── Audio recordings (in-memory, cleared on page reload) ───────────────────
+  const [recordings, setRecordings] = useState<RecordingEntry[]>([]);
+
+  const addRecording = useCallback((entry: RecordingEntry) => {
+    setRecordings((prev) => [...prev, entry]);
+  }, []);
+
+  const deleteRecording = useCallback((id: string) => {
+    setRecordings((prev) => {
+      const entry = prev.find((r) => r.id === id);
+      if (entry) URL.revokeObjectURL(entry.audioUrl);
+      return prev.filter((r) => r.id !== id);
+    });
+  }, []);
+
+  const clearRecordings = useCallback(() => {
+    setRecordings((prev) => {
+      prev.forEach((r) => URL.revokeObjectURL(r.audioUrl));
+      return [];
+    });
+  }, []);
 
   // ── FIX #1: Single timer — lives at App level, props pass down ─────────────
   // PhaseListening receives elapsedSeconds, isRunning, timerStart, timerPause
@@ -353,6 +375,11 @@ function App() {
             updateTimeline={state.updateTimeline}
             setStatus={state.setStatus}
             isActive={phase === 'listening'}
+            // Audio recordings
+            recordings={recordings}
+            addRecording={addRecording}
+            deleteRecording={deleteRecording}
+            clearRecordings={clearRecordings}
           />
 
           {phase === 'mark_entry' && state.markEntryDraft && (

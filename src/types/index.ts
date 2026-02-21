@@ -112,3 +112,16 @@ export type DictationStatus =
   | 'transcribing'
   | 'done'
   | 'error';
+
+// A single audio recording captured during a dictation session.
+// Stored in App-level React state (in-memory, cleared on page reload).
+export interface RecordingEntry {
+  id: string;          // crypto.randomUUID()
+  trackId: number;
+  timestamp: string;   // M:SS — captured at dictate-click time
+  createdAt: number;   // Date.now()
+  audioBlob: Blob;     // raw audio (audio/webm or audio/ogg)
+  audioUrl: string;    // URL.createObjectURL(audioBlob) — revoked on delete
+  transcript: string;  // Speech API transcript captured at record time
+  mimeType: string;    // the mimeType used by MediaRecorder
+}

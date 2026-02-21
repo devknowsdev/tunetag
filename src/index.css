@@ -746,6 +746,20 @@ button {
   border-radius: 2px;
 }
 
+/* ── Recording cards ───────────────────────────────────────────────────────── */
+.recording-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem;
+  margin-bottom: 0.5rem;
+  transition: border-color var(--transition);
+}
+
+.recording-card:hover {
+  border-color: var(--border-active);
+}
+
 /* ── Mobile sticky mark button ─────────────────────────────────────────────── */
 @media (max-width: 580px) {
   .mark-button {
