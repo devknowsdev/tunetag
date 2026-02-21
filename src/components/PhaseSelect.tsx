@@ -67,8 +67,7 @@ export function PhaseSelect({
       );
       if (choice) {
         setActiveTrackId(trackId);
-        const nextPhase = ann.resumePhase ?? (ann.timeline.length > 0 ? 'listening' : 'ready');
-        setPhase(nextPhase);
+        setPhase('ready');
       } else {
         if (window.confirm('Start over? This will clear all progress for this track.')) {
           setActiveTrackId(trackId);
@@ -99,10 +98,8 @@ export function PhaseSelect({
 
   function handleContinue() {
     if (!firstInProgress) return;
-    const ann = annotations[firstInProgress.id];
     setActiveTrackId(firstInProgress.id);
-    const nextPhase = ann.resumePhase ?? (ann.timeline.length > 0 ? 'listening' : 'ready');
-    setPhase(nextPhase);
+    setPhase('ready');
   }
 
   // ── Render ───────────────────────────────────────────────────────────────

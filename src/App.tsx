@@ -17,6 +17,7 @@ import { SpotifyPlayer } from './components/SpotifyPlayer';
 import { useSpotifyPlayer } from './hooks';
 import { handleSpotifyCallback, getStoredToken, initiateSpotifyLogin } from './lib/spotifyAuth';
 import { playTrack, transferPlayback } from './lib/spotifyApi';
+import { loadResearchedPacks } from './lib/loadResearchedPacks';
 
 function App() {
   const [showHelp, setShowHelp] = useState(false);
@@ -50,6 +51,14 @@ function App() {
 
   // ── App state ──────────────────────────────────────────────────────────────
   const state = useAnnotationState();
+
+  // ── Auto-load researched tag packs on setup complete ───────────────────────
+  // Runs once after apiKeyDone becomes true. Missing pack files are skipped silently.
+  useEffect(() => {
+    if (!apiKeyDone) return;
+    loadResearchedPacks(state.importTagPack);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKeyDone]);
 
   // ── Audio recordings (in-memory, cleared on page reload) ───────────────────
   const [recordings, setRecordings] = useState<RecordingEntry[]>([]);

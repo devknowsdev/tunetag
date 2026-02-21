@@ -93,7 +93,7 @@ export function PhaseMarkEntry({
   const [sectionTypeCustom, setSectionTypeCustom] = useState(
     SECTION_TYPE_SHORTCUTS.includes(draft.sectionType) ? '' : draft.sectionType
   );
-  const [sectionOpen, setSectionOpen] = useState(!draft.sectionType);
+  const [sectionOpen, setSectionOpen] = useState(false);
 
   // ── Narrative ──────────────────────────────────────────────────────────────
   const [narrative, setNarrative] = useState(draft.narrative);

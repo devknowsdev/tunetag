@@ -2,7 +2,7 @@
 // All crypto via the Web Crypto API (available in all modern browsers).
 
 const CLIENT_ID = '9f5cd6650d1843ca8b9829aacaa31d4f';
-const REDIRECT_URI = 'https://localhost:5173';
+const REDIRECT_URI = window.location.origin + '/callback';
 const SCOPES =
   'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state';
 
