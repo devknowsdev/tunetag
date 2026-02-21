@@ -8,6 +8,8 @@ import type { UseSpotifyPlayerReturn } from '../hooks/useSpotifyPlayer';
 interface SpotifyPlayerProps {
   player: UseSpotifyPlayerReturn;
   spotifyId?: string | null;
+  /** When true, renders inline (no fixed positioning) for sidebar use */
+  compact?: boolean;
 }
 
 /** Format milliseconds → m:ss */
@@ -50,7 +52,7 @@ function generateWaveform(seed: string): number[] {
   });
 }
 
-export function SpotifyPlayer({ player, spotifyId }: SpotifyPlayerProps) {
+export function SpotifyPlayer({ player, spotifyId, compact = false }: SpotifyPlayerProps) {
   const {
     isReady,
     isPlaying,
@@ -95,8 +97,18 @@ export function SpotifyPlayer({ player, spotifyId }: SpotifyPlayerProps) {
     seek(0);
   }
 
+  const barStyle: React.CSSProperties = compact
+    ? {
+        background: 'var(--surface)',
+        borderRadius: 'var(--radius)',
+        border: '1px solid var(--border)',
+        overflow: 'hidden',
+        width: '100%',
+      }
+    : styles.bar;
+
   return (
-    <div style={styles.bar}>
+    <div style={barStyle}>
       {/* ── Waveform scrubber ── */}
       <div
         ref={scrubberRef}

@@ -41,8 +41,8 @@ export function AppSidebar({
 }: Props) {
   const [open, setOpen] = useState(false);
 
-  // Hidden in flow mode
-  if (phase === 'flow') return null;
+  // Show in all phases (including flow and fullscreen)
+  const isImmersive = phase === 'flow';
 
   const itemStyle: React.CSSProperties = {
     fontFamily: 'var(--font-mono)',
@@ -64,6 +64,15 @@ export function AppSidebar({
     margin: '0.25rem 0',
   };
 
+  const sectionLabelStyle: React.CSSProperties = {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.6rem',
+    color: 'var(--text-dim)',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase' as const,
+    padding: '0.5rem 1rem 0.25rem',
+  };
+
   return (
     <>
       {/* ── TOGGLE TAB ── */}
@@ -72,26 +81,31 @@ export function AppSidebar({
         aria-label={open ? 'Close sidebar' : 'Open sidebar'}
         style={{
           position: 'fixed',
-          left: open ? '220px' : 0,
+          left: open ? '240px' : 0,
           top: '50%',
           transform: 'translateY(-50%)',
-          zIndex: 60,
+          zIndex: 120,
           background: 'var(--surface)',
           border: '1px solid var(--border-active)',
           borderLeft: open ? '1px solid var(--border-active)' : 'none',
-          borderRadius: open ? '0 var(--radius-pill) var(--radius-pill) 0' : '0 var(--radius-pill) var(--radius-pill) 0',
+          borderRadius: '0 var(--radius-pill) var(--radius-pill) 0',
           color: 'var(--amber)',
           fontFamily: 'var(--font-mono)',
-          fontSize: '0.7rem',
-          padding: '0.5rem 0.4rem',
+          fontSize: '0.8rem',
+          padding: '0.75rem 0.5rem',
           cursor: 'pointer',
           lineHeight: 1,
-          transition: 'left var(--transition)',
+          transition: 'left 200ms ease',
           writingMode: 'vertical-rl',
-          letterSpacing: '0.08em',
+          letterSpacing: '0.1em',
+          minHeight: '80px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.25rem',
         }}
       >
-        {open ? '◀' : '▶'}
+        {open ? '◀ CLOSE' : '▶ MENU'}
       </button>
 
       {/* ── SIDEBAR PANEL ── */}
@@ -101,33 +115,25 @@ export function AppSidebar({
           left: 0,
           top: 0,
           height: '100vh',
-          width: '220px',
+          width: '240px',
           background: 'var(--surface)',
           borderRight: '1px solid var(--border)',
-          zIndex: 50,
+          zIndex: 110,
           display: 'flex',
           flexDirection: 'column',
           overflowY: 'auto',
           transform: open ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform var(--transition)',
+          transition: 'transform 200ms ease',
+          boxShadow: open ? '4px 0 24px rgba(0,0,0,0.4)' : 'none',
         }}
       >
         {/* APP section */}
         <div style={{ paddingTop: '1rem' }}>
-          <p style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.6rem',
-            color: 'var(--text-dim)',
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            padding: '0 1rem 0.25rem',
-          }}>
-            APP
-          </p>
-          <button className="btn-ghost" style={itemStyle} onClick={onSetup}>
-            SETUP
+          <p style={sectionLabelStyle}>APP</p>
+          <button className="btn-ghost" style={itemStyle} onClick={() => { onSetup(); setOpen(false); }}>
+            ⚙ SETUP
           </button>
-          <button className="btn-ghost" style={itemStyle} onClick={onHelp}>
+          <button className="btn-ghost" style={itemStyle} onClick={() => { onHelp(); setOpen(false); }}>
             ? HELP
           </button>
         </div>
@@ -136,25 +142,17 @@ export function AppSidebar({
 
         {/* SPOTIFY section */}
         <div>
-          <p style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.6rem',
-            color: 'var(--text-dim)',
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            padding: '0.5rem 1rem 0.25rem',
-          }}>
-            SPOTIFY
-          </p>
+          <p style={sectionLabelStyle}>SPOTIFY</p>
           {!spotifyToken ? (
             <button className="btn-ghost" style={itemStyle} onClick={onSpotifyLogin}>
               ♫ CONNECT SPOTIFY
             </button>
           ) : (
-            <div style={{ padding: '0.5rem 0.5rem' }}>
+            <div style={{ padding: '0.5rem' }}>
               <SpotifyPlayer
                 player={spotifyPlayer}
                 spotifyId={activeAnnotation?.track.spotifyId ?? null}
+                compact
               />
             </div>
           )}
@@ -165,20 +163,11 @@ export function AppSidebar({
           <>
             <div style={dividerStyle} />
             <div>
-              <p style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.6rem',
-                color: 'var(--text-dim)',
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                padding: '0.5rem 1rem 0.25rem',
-              }}>
-                SESSION
-              </p>
+              <p style={sectionLabelStyle}>SESSION</p>
               <div style={{ padding: '0.25rem 1rem 0.75rem' }}>
                 <p style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '1rem',
+                  fontSize: '1.25rem',
                   color: timerRunning ? 'var(--amber)' : 'var(--text-dim)',
                   letterSpacing: '0.04em',
                   margin: '0 0 0.25rem',
@@ -197,33 +186,55 @@ export function AppSidebar({
                 }}>
                   {activeAnnotation.track.name}
                 </p>
+                <p style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.65rem',
+                  color: 'var(--text-dim)',
+                  margin: '0.125rem 0 0',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {activeAnnotation.track.artist}
+                </p>
               </div>
+            </div>
+          </>
+        )}
+
+        {/* IMMERSIVE MODE hints — shown in flow/fullscreen */}
+        {isImmersive && (
+          <>
+            <div style={dividerStyle} />
+            <div>
+              <p style={sectionLabelStyle}>IMMERSIVE MODE</p>
+              <p style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.65rem',
+                color: 'var(--text-dim)',
+                padding: '0.5rem 1rem',
+                lineHeight: 1.6,
+              }}>
+                Spotify controls and timeline drawer are available below the waveform.
+                Close this menu to return to the full flow view.
+              </p>
             </div>
           </>
         )}
       </div>
 
-      {/* ── MOBILE OVERLAY ── */}
+      {/* ── OVERLAY (closes sidebar on click-outside) ── */}
       {open && (
         <div
           onClick={() => setOpen(false)}
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 40,
-            background: 'rgba(0,0,0,0.45)',
+            zIndex: 100,
+            background: 'rgba(0,0,0,0.5)',
           }}
-          // Only shown on mobile — hidden on desktop via media query below
-          className="sidebar-overlay"
         />
       )}
-
-      {/* ── RESPONSIVE: hide overlay on desktop ── */}
-      <style>{`
-        @media (min-width: 769px) {
-          .sidebar-overlay { display: none !important; }
-        }
-      `}</style>
     </>
   );
 }

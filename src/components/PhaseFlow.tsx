@@ -84,7 +84,7 @@ export function PhaseFlow({
   timerSeek,
   setPhase,
   updateTimeline,
-  spotifyToken: _spotifyToken,
+  spotifyToken,
   spotifyPlayer,
 }: Props) {
   const trackId = annotation.track.id;
@@ -362,7 +362,7 @@ export function PhaseFlow({
       <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <WaveformScrubber
           spotifyTrackId={annotation.track.spotifyId}
-          spotifyToken={_spotifyToken}
+          spotifyToken={spotifyToken}
           elapsedSeconds={elapsedSeconds}
           durationSeconds={durationSeconds}
           onSeek={(secs) => {

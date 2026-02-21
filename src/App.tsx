@@ -15,6 +15,7 @@ import { PhaseFlow } from './components/PhaseFlow';
 import { HowToUse } from './components/HowToUse';
 import { AppSidebar } from './components/AppSidebar';
 import { useSpotifyPlayer } from './hooks';
+import { SpotifyPlayer } from './components/SpotifyPlayer';
 import { handleSpotifyCallback, getStoredToken, initiateSpotifyLogin } from './lib/spotifyAuth';
 import { playTrack, transferPlayback } from './lib/spotifyApi';
 import { loadResearchedPacks } from './lib/loadResearchedPacks';
@@ -96,15 +97,21 @@ function App() {
     }, [])
   );
 
+  // spotifyPlayerRef — stable ref so timerStart/timerPause closures always
+  // reach the latest player without needing it as a dependency.
+  const spotifyPlayerRef = useRef<ReturnType<typeof useSpotifyPlayer> | null>(null);
+
   const timerStart = useCallback(() => {
     timer.start();
     state.setTimerRunning(true);
+    spotifyPlayerRef.current?.play().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer.start, state.setTimerRunning]);
 
   const timerPause = useCallback(() => {
     timer.pause();
     state.setTimerRunning(false);
+    spotifyPlayerRef.current?.pause().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer.pause, state.setTimerRunning]);
 
@@ -166,6 +173,8 @@ function App() {
   }, []);
 
   const spotifyPlayer = useSpotifyPlayer(spotifyToken);
+  // Keep ref in sync every render so timerStart/timerPause closures use latest player
+  spotifyPlayerRef.current = spotifyPlayer;
 
   const pendingSpotifyIdRef = useRef<string | null>(null);
 
@@ -219,7 +228,7 @@ function App() {
       {/* Help modal */}
       {showHelp && <HowToUse onClose={() => setShowHelp(false)} />}
 
-      {/* Global sidebar — hidden in flow mode */}
+      {/* Global sidebar */}
       <AppSidebar
         phase={phase}
         activeAnnotation={activeAnnotation}
@@ -231,6 +240,14 @@ function App() {
         spotifyToken={spotifyToken}
         spotifyPlayer={spotifyPlayer}
       />
+
+      {/* Global Spotify bottom bar — shown on non-immersive phases only */}
+      {spotifyToken && phase !== 'flow' && (
+        <SpotifyPlayer
+          player={spotifyPlayer}
+          spotifyId={activeAnnotation?.track.spotifyId ?? null}
+        />
+      )}
 
       {/* Resume banner */}
       {bannerVisible && (
