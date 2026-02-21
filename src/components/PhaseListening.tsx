@@ -999,6 +999,414 @@ export function PhaseListening({
 
   const displayEntries = [...timeline].reverse();
 
+  // ── VIEW MODE ──────────────────────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState<'classic' | 'fullscreen'>('classic');
+  const [fsTimelineOpen, setFsTimelineOpen] = useState(false);
+  const [fsRecordingsOpen, setFsRecordingsOpen] = useState(false);
+
+  // ── FULLSCREEN RENDER ──────────────────────────────────────────────────────
+  if (viewMode === 'fullscreen') {
+    const trackRecordingsFs = enrichedRecordings.filter((r) => r.trackId === track.id);
+
+    return (
+      <div style={{
+        position: 'fixed', inset: 0,
+        background: 'var(--bg)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        fontFamily: 'var(--font-mono)',
+        zIndex: 50,
+      }}>
+        {/* ── FS TOP BAR ── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0.625rem 1rem',
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0, gap: '1rem',
+        }}>
+          {/* Track info */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              fontFamily: 'var(--font-display)', fontStyle: 'italic',
+              fontSize: '1rem', fontWeight: 600,
+              color: 'var(--text)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              margin: 0,
+            }}>
+              {track.name}
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
+              color: 'var(--text-muted)', margin: 0,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {track.artist}
+            </p>
+          </div>
+
+          {/* Elapsed time — large amber */}
+          <button
+            onClick={toggleTimer}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: '1.75rem', fontWeight: 700,
+              color: timerColor, padding: 0, flexShrink: 0,
+            }}
+            title={isTimerRunning ? 'Pause' : 'Resume'}
+          >
+            {formatMSS(elapsedSeconds)}
+          </button>
+
+          {/* Right controls */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+            <button
+              className="btn-ghost"
+              onClick={() => setViewMode('classic')}
+              style={{ fontSize: '0.72rem', letterSpacing: '0.05em', padding: '0.3rem 0.6rem' }}
+            >
+              ⊠ EXIT FULL
+            </button>
+            <button
+              className="btn-ghost"
+              onClick={() => setPhase('flow')}
+              style={{ fontSize: '0.72rem', letterSpacing: '0.05em', padding: '0.3rem 0.6rem' }}
+            >
+              ⟩ FLOW
+            </button>
+            <button
+              className="btn-primary"
+              disabled={timeline.length === 0}
+              onClick={handleDone}
+              style={{ fontSize: '0.72rem', padding: '0.3rem 0.75rem' }}
+            >
+              DONE →
+            </button>
+          </div>
+        </div>
+
+        {/* ── FS PROGRESS BAR ── */}
+        <div style={{ width: '100%', height: '3px', background: 'var(--surface)', flexShrink: 0 }}>
+          <div style={{
+            height: '100%',
+            width: `${Math.min(1, elapsedSeconds / ((annotation.track as any).durationSeconds ?? 300)) * 100}%`,
+            background: 'var(--amber)',
+            transition: 'width 1s linear',
+          }} />
+        </div>
+
+        {/* ── FS SCROLLABLE BODY ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+
+          {/* Dictation overlay — reuse existing, shown over fullscreen too */}
+          {dictation.state.status !== 'idle' && (
+            <div className="dictation-overlay">
+              {dictation.state.status === 'awaiting_manual_pause' && (
+                <div className="dictation-card">
+                  <p className="label" style={{ color: 'var(--amber)', marginBottom: '0.75rem' }}>🎙 DICTATE</p>
+                  <p style={{ color: 'var(--text)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
+                    Spotify can't be paused automatically — please pause your playback now,
+                    then press <strong>Start Recording</strong>.
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                    Timestamp captured: {dictation.state.capturedTimestamp}
+                  </p>
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={{
+                      display: 'block', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                      letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: '0.375rem',
+                    }}>MICROPHONE INPUT</label>
+                    <select
+                      className="text-input"
+                      value={selectedMicId}
+                      onChange={(e) => setSelectedMicId(e.target.value)}
+                      style={{ cursor: 'pointer', fontSize: '0.875rem' }}
+                    >
+                      <option value="">Default (system)</option>
+                      {micDevices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn-ghost" onClick={dictation.cancel}>Cancel</button>
+                    <button className="btn-primary" onClick={dictation.startRecording}>● Start Recording</button>
+                  </div>
+                </div>
+              )}
+              {dictation.state.status === 'recording' && (
+                <div className="dictation-card">
+                  <p className="label" style={{ color: 'var(--error)', marginBottom: '0.5rem' }}>● RECORDING…</p>
+                  <MicLevelMeter stream={dictation.micStreamRef.current} />
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-dim)', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
+                    LIVE TRANSCRIPT (BROWSER SPEECH RECOGNITION)
+                  </p>
+                  <p style={{ color: dictation.state.transcript ? 'var(--text)' : 'var(--text-muted)', minHeight: '3rem', fontFamily: 'var(--font-serif)', lineHeight: 1.6, marginBottom: '0.5rem' }}>
+                    {dictation.state.transcript || 'Listening…'}
+                  </p>
+                  {dictation.state.noSpeechHint && !dictation.state.transcript && (
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)', fontStyle: 'italic', marginBottom: '0.75rem' }}>
+                      Speak clearly into your microphone…
+                    </p>
+                  )}
+                  <button className="btn-primary" onClick={dictation.stopRecording}>■ Stop Recording</button>
+                </div>
+              )}
+              {dictation.state.status === 'finalizing' && (
+                <div className="dictation-card">
+                  <p className="label" style={{ color: 'var(--amber)', marginBottom: '0.75rem' }}>⏳ FINALIZING RECORDING…</p>
+                </div>
+              )}
+              {dictation.state.status === 'audio_saved' && (
+                <div className="dictation-card">
+                  <p className="label" style={{ color: 'var(--success)', marginBottom: '0.75rem' }}>AUDIO SAVED ✓</p>
+                  {!dictation.state.transcript && (
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      Audio saved — no transcript captured
+                    </p>
+                  )}
+                </div>
+              )}
+              {dictation.state.status === 'error' && (
+                <div className="dictation-card">
+                  <p className="label" style={{ color: 'var(--error)', marginBottom: '0.75rem' }}>DICTATION ERROR</p>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>{dictation.state.error}</p>
+                  <button className="btn-ghost" onClick={dictation.cancel}>Dismiss</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── FS TRANSPORT ROW ── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: '1.5rem', marginBottom: '1.25rem',
+          }}>
+            <button
+              aria-label="Back 10 seconds"
+              style={fsTransportBtn}
+              onClick={() => { /* seek not available via timer prop */ }}
+            >
+              ⏮ −10s
+            </button>
+            <button
+              aria-label={isTimerRunning ? 'Pause' : 'Play'}
+              onClick={toggleTimer}
+              style={{
+                ...fsTransportBtn,
+                minWidth: '68px', minHeight: '68px',
+                fontSize: '1.75rem',
+                background: 'var(--amber)', color: 'var(--bg)',
+                border: 'none', borderRadius: '50%',
+              }}
+            >
+              {isTimerRunning ? '⏸' : '▶'}
+            </button>
+            <button
+              aria-label="Forward 10 seconds"
+              style={fsTransportBtn}
+              onClick={() => { /* seek not available via timer prop */ }}
+            >
+              +10s ⏭
+            </button>
+          </div>
+
+          {/* ── FS MIC METER — only when recording ── */}
+          {dictation.state.status === 'recording' && dictation.micStreamRef.current && (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: '0.375rem' }}>
+                MIC
+              </p>
+              <MicLevelMeter stream={dictation.micStreamRef.current} />
+            </div>
+          )}
+
+          {/* ── FS TAG / MARK GRID ── */}
+          <div style={{ marginBottom: '6rem' }}>
+            <p style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+              color: 'var(--text-dim)', letterSpacing: '0.08em',
+              textTransform: 'uppercase', marginBottom: '0.625rem',
+            }}>
+              MARK A MOMENT
+            </p>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: '0.5rem',
+            }}>
+              <button
+                onClick={handleMark}
+                disabled={atCap || dictation.state.status !== 'idle'}
+                style={{
+                  minHeight: '44px',
+                  background: atCap ? 'var(--surface)' : 'var(--amber)',
+                  color: atCap ? 'var(--text-dim)' : 'var(--bg)',
+                  border: '1px solid var(--border-active)',
+                  borderRadius: 'var(--radius-pill)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                  letterSpacing: '0.04em', cursor: atCap ? 'not-allowed' : 'pointer',
+                  padding: '0.25rem 0.75rem',
+                }}
+                title={atCap ? 'Maximum 10 sections reached' : undefined}
+              >
+                ⏺ MARK
+              </button>
+              <button
+                onClick={handleDictateClick}
+                disabled={atCap || dictation.state.status !== 'idle'}
+                style={{
+                  minHeight: '44px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border-active)',
+                  borderRadius: 'var(--radius-pill)',
+                  color: 'var(--text)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                  letterSpacing: '0.04em', cursor: 'pointer',
+                  padding: '0.25rem 0.75rem',
+                }}
+              >
+                🎙 DICTATE
+              </button>
+            </div>
+            {atCap && (
+              <p style={{ color: 'var(--amber)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                10/10 sections — edit or remove to add more
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ── FS FIXED BOTTOM TOOLBAR ── */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          background: 'var(--surface)',
+          borderTop: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0.625rem 1rem',
+          gap: '0.5rem',
+          zIndex: 10,
+        }}>
+          {/* Left: Dictate */}
+          <button
+            className="btn-ghost"
+            onClick={handleDictateClick}
+            disabled={atCap || dictation.state.status !== 'idle'}
+            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
+          >
+            🎙 DICTATE
+          </button>
+
+          {/* Centre: Recordings toggle */}
+          <button
+            className="btn-ghost"
+            onClick={() => { setFsRecordingsOpen((v) => !v); setFsTimelineOpen(false); }}
+            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
+          >
+            {fsRecordingsOpen ? '▾ ' : '▴ '}
+            REC
+            {trackRecordingsFs.length > 0 && ` (${trackRecordingsFs.length})`}
+          </button>
+
+          {/* Right: Timeline toggle */}
+          <button
+            className="btn-ghost"
+            onClick={() => { setFsTimelineOpen((v) => !v); setFsRecordingsOpen(false); }}
+            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
+          >
+            {fsTimelineOpen ? '▾ ' : '▴ '}
+            TIMELINE ({timeline.length})
+          </button>
+        </div>
+
+        {/* ── FS TIMELINE DRAWER ── */}
+        {fsTimelineOpen && (
+          <div style={{
+            position: 'absolute', bottom: '56px', left: 0, right: 0,
+            background: 'var(--surface)',
+            borderTop: '1px solid var(--border)',
+            maxHeight: '55vh', overflowY: 'auto',
+            zIndex: 9, padding: '0.75rem 1rem 1rem',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
+                TIMELINE — {timeline.length} entries
+              </span>
+              <button
+                onClick={() => setFsTimelineOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '1rem' }}
+              >
+                ✕
+              </button>
+            </div>
+            {displayEntries.length === 0 ? (
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                No entries yet.
+              </p>
+            ) : (
+              displayEntries.map((entry) => (
+                <div key={entry.id} className="timeline-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span className="timestamp-label">{entry.timestamp}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="icon-btn" onClick={() => { setFsTimelineOpen(false); handleEdit(entry); }} title="Edit">✎</button>
+                      <button className="icon-btn icon-btn--danger" onClick={() => handleDelete(entry.id)} title="Delete">×</button>
+                    </div>
+                  </div>
+                  <p className="timeline-section-type">{entry.sectionType}</p>
+                  <p className="timeline-narrative">{entry.narrative}</p>
+                  {entry.tags && <p className="timeline-tags">{entry.tags}</p>}
+                  {entry.isDictated && <span className="dictated-badge">🎙 dictated</span>}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── FS RECORDINGS DRAWER ── */}
+        {fsRecordingsOpen && (
+          <div style={{
+            position: 'absolute', bottom: '56px', left: 0, right: 0,
+            background: 'var(--surface)',
+            borderTop: '1px solid var(--border)',
+            maxHeight: '55vh', overflowY: 'auto',
+            zIndex: 9, padding: '0.75rem 1rem 1rem',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
+                RECORDINGS — {trackRecordingsFs.length} for this track
+              </span>
+              <button
+                onClick={() => setFsRecordingsOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '1rem' }}
+              >
+                ✕
+              </button>
+            </div>
+            {trackRecordingsFs.length === 0 ? (
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                No recordings yet.
+              </p>
+            ) : (
+              trackRecordingsFs.map((rec) => (
+                <RecordingCard
+                  key={rec.id}
+                  rec={rec}
+                  onDelete={deleteRecording}
+                  onUseTranscript={(t, ts) => { setFsRecordingsOpen(false); handleUseTranscript(t, ts); }}
+                  onUpdateTranscript={handleUpdateTranscript}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── CLASSIC RENDER ─────────────────────────────────────────────────────────
   return (
     <div className="phase-listening">
       {/* Sticky top bar */}
@@ -1245,6 +1653,7 @@ export function PhaseListening({
           <button className="btn-ghost" onClick={() => { timerPause(); setPhase('select'); }}>← Menu</button>
           <button className="btn-ghost btn-destructive" onClick={handleSkip}>SKIP THIS TRACK</button>
           <button className="btn-ghost" onClick={() => setPhase('flow')}>⟩ FLOW MODE</button>
+          <button className="btn-ghost" onClick={() => setViewMode('fullscreen')}>⛶ FULL</button>
         </div>
         <button className="btn-primary" disabled={timeline.length === 0} onClick={handleDone}>
           DONE — PART 2 →
@@ -1253,3 +1662,21 @@ export function PhaseListening({
     </div>
   );
 }
+
+// ── Shared style object for fullscreen transport buttons ───────────────────
+const fsTransportBtn: React.CSSProperties = {
+  minWidth: '64px',
+  minHeight: '44px',
+  background: 'var(--surface)',
+  border: '1px solid var(--border-active)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--text)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.85rem',
+  letterSpacing: '0.04em',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '0 0.75rem',
+};
