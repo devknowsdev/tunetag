@@ -11,6 +11,7 @@ import { PhaseListening } from './components/PhaseListening';
 import { PhaseMarkEntry } from './components/PhaseMarkEntry';
 import { PhaseGlobal } from './components/PhaseGlobal';
 import { PhaseReview } from './components/PhaseReview';
+import { PhasePromptsTags } from './components/PhasePromptsTags';
 import { HowToUse } from './components/HowToUse';
 import { SpotifyPlayer } from './components/SpotifyPlayer';
 import { useSpotifyPlayer } from './hooks/useSpotifyPlayer';
@@ -73,8 +74,6 @@ function App() {
   }, []);
 
   // ── FIX #1: Single timer — lives at App level, props pass down ─────────────
-  // PhaseListening receives elapsedSeconds, isRunning, timerStart, timerPause
-  // as props and does NOT create its own useTimer instance.
   const activeTrackIdRef = useRef<number | null>(null);
   activeTrackIdRef.current = state.activeTrackId;
 
@@ -84,12 +83,10 @@ function App() {
       if (id !== null) {
         state.updateElapsedSeconds(id, secs);
       }
-    // updateElapsedSeconds is stable (useCallback with no deps), safe to omit
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
 
-  // Convenience wrappers that keep timer + persisted flag in sync
   const timerStart = useCallback(() => {
     timer.start();
     state.setTimerRunning(true);
@@ -103,8 +100,6 @@ function App() {
   }, [timer.pause, state.setTimerRunning]);
 
   // ── FIX #3: Timer rehydration on track/phase changes ──────────────────────
-  // Ensures elapsedSeconds and running state are correct when switching tracks,
-  // restarting tracks, or resuming from the select screen (not just the banner).
   useEffect(() => {
     if (state.activeTrackId === null) {
       timer.pause();
@@ -114,40 +109,31 @@ function App() {
     const ann = state.annotations[state.activeTrackId];
     if (!ann) return;
 
-    // Rehydrate persisted elapsed seconds into the runtime timer
     timer.setSeconds(ann.elapsedSeconds ?? 0);
 
-    // Align running state with persisted timerRunning flag
     if (state.phase === 'listening' && state.timerRunning) {
       timer.start();
     } else {
       timer.pause();
     }
-  // timer tick updates annotations[activeTrackId].elapsedSeconds continuously —
-  // exclude annotations from deps to avoid a feedback loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.activeTrackId, state.phase, state.timerRunning]);
 
   // ── Resume banner ──────────────────────────────────────────────────────────
-  // FIX #2: use the snapshot returned by resumeSavedState() to read timer
-  // values synchronously, avoiding stale-closure issues.
   const [bannerVisible, setBannerVisible] = useState(false);
   useEffect(() => {
     setBannerVisible(state.hasSavedState);
   }, [state.hasSavedState]);
 
   function handleResume() {
-    const snapshot = state.resumeSavedState(); // returns saved AppState synchronously
+    const snapshot = state.resumeSavedState();
     setBannerVisible(false);
     if (!snapshot) return;
 
-    // Restore elapsed seconds from the saved active track
     if (snapshot.activeTrackId !== null) {
       const ann = snapshot.annotations[snapshot.activeTrackId];
       if (ann) timer.setSeconds(ann.elapsedSeconds ?? 0);
     }
-    // Restore running state — explicitly call pause when not running to clear
-    // any stale interval that might have been left from a prior session.
     if (snapshot.timerRunning) {
       timer.start();
     } else {
@@ -161,7 +147,6 @@ function App() {
   }
 
   // ── Spotify ────────────────────────────────────────────────────────────────
-  // Handle OAuth callback once on mount — no-op if no ?code= in URL.
   const [spotifyToken, setSpotifyToken] = useState<string | null>(() => getStoredToken());
 
   useEffect(() => {
@@ -171,15 +156,10 @@ function App() {
     })();
   }, []);
 
-  // Initialise the player; token is forwarded so the hook can handle the race
-  // where the SDK callback fires before the token is available.
   const spotifyPlayer = useSpotifyPlayer(spotifyToken);
 
-  // Auto-play: store the target spotifyId when phase becomes 'listening', then
-  // fire once isReady and deviceId are both available.
   const pendingSpotifyIdRef = useRef<string | null>(null);
 
-  // Phase change: capture the spotifyId that should be played.
   useEffect(() => {
     if (state.phase !== 'listening') {
       pendingSpotifyIdRef.current = null;
@@ -193,14 +173,13 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  // Player ready: fire playback once the player is ready and a spotifyId is pending.
   useEffect(() => {
     console.log('[Spotify] Player ready effect fired — isReady:', spotifyPlayer.isReady, ', deviceId:', spotifyPlayer.deviceId, ', pending:', pendingSpotifyIdRef.current);
     if (!spotifyPlayer.isReady || !spotifyPlayer.deviceId) return;
     if (!spotifyToken) return;
     const spotifyId = pendingSpotifyIdRef.current;
     if (!spotifyId) return;
-    pendingSpotifyIdRef.current = null; // consume so it doesn't re-fire
+    pendingSpotifyIdRef.current = null;
 
     console.log('[Spotify] Calling transferPlayback then playTrack for:', spotifyId);
     (async () => {
@@ -218,30 +197,7 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotifyPlayer.isReady, spotifyPlayer.deviceId]);
 
-  // ── Loading / failed states ────────────────────────────────────────────────
-  if (templateState.status === 'loading') {
-    return (
-      <div className="fullscreen-center">
-        <p className="label" style={{ color: 'var(--amber)' }}>BEATPULSE ANNOTATOR</p>
-        <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Loading annotation template…</p>
-      </div>
-    );
-  }
-
-  if (templateState.status === 'failed') {
-    return (
-      <div className="fullscreen-center">
-        <p style={{ color: 'var(--error)', marginBottom: '0.75rem' }}>Could not load the annotation template.</p>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Please refresh the page. If this keeps happening, check that{' '}
-          <code style={{ fontFamily: 'var(--font-mono)' }}>template.xlsx</code> is in the{' '}
-          <code style={{ fontFamily: 'var(--font-mono)' }}>public/</code> folder.
-        </p>
-        <button className="btn-primary" onClick={loadTemplate}>Retry</button>
-      </div>
-    );
-  }
-
+  // ── Early returns ──────────────────────────────────────────────────────────
   if (!apiKeyDone) {
     return <SetupScreen onEnter={handleApiKeyDone} />;
   }
@@ -252,7 +208,7 @@ function App() {
   return (
     <div className="app-root">
       {/* Help + Setup buttons */}
-      {!showHelp && (
+      {!showHelp && phase !== 'prompts_tags' && (
         <div style={{ position: 'fixed', top: '0.75rem', right: '0.75rem', zIndex: 100, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           {activeAnnotation && (
             <span style={{
@@ -312,7 +268,7 @@ function App() {
       {showHelp && <HowToUse onClose={() => setShowHelp(false)} />}
 
       {/* Connect Spotify button — only shown when not authenticated */}
-      {!spotifyToken && (
+      {!spotifyToken && phase !== 'prompts_tags' && (
         <button
           onClick={() => { initiateSpotifyLogin(); }}
           aria-label="Connect Spotify"
@@ -337,7 +293,7 @@ function App() {
       )}
 
       {/* Spotify player bar — shown once authenticated */}
-      {spotifyToken && (
+      {spotifyToken && phase !== 'prompts_tags' && (
         <SpotifyPlayer
           player={spotifyPlayer}
           spotifyId={activeAnnotation?.track.spotifyId ?? null}
@@ -357,6 +313,23 @@ function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── Phases ── */}
+
+      {phase === 'prompts_tags' && (
+        <PhasePromptsTags
+          library={state.library}
+          undoStack={state.undoStack}
+          onBack={() => state.setPhase('select')}
+          addCustomTag={state.addCustomTag}
+          hideBuiltinTag={state.hideBuiltinTag}
+          deleteCustomTag={state.deleteCustomTag}
+          restoreHiddenTag={state.restoreHiddenTag}
+          togglePackEnabled={state.togglePackEnabled}
+          importTagPack={state.importTagPack}
+          undoLastAction={state.undoLastAction}
+        />
       )}
 
       {phase === 'select' && (
@@ -379,22 +352,15 @@ function App() {
               annotator: state.annotator.trim(),
             });
             state.setPhase('listening');
-            // timerStart() handles both timer.start() + setTimerRunning(true).
-            // The timer rehydration effect will also fire on phase change, but
-            // calling timerStart here ensures the timer is live immediately.
             timerStart();
           }}
         />
       )}
 
-      {/* FIX #1: Both listening and mark_entry render together.
-          PhaseListening stays mounted (preserves scroll) while mark_entry
-          overlays it. Timer state threads down as props — no second useTimer. */}
       {(phase === 'listening' || phase === 'mark_entry') && activeAnnotation && (
         <>
           <PhaseListening
             annotation={activeAnnotation}
-            // Timer props — single source of truth
             elapsedSeconds={timer.elapsedSeconds}
             isTimerRunning={timer.isRunning}
             timerStart={timerStart}
@@ -404,7 +370,6 @@ function App() {
             updateTimeline={state.updateTimeline}
             setStatus={state.setStatus}
             isActive={phase === 'listening'}
-            // Audio recordings
             recordings={recordings}
             addRecording={addRecording}
             deleteRecording={deleteRecording}
@@ -420,6 +385,7 @@ function App() {
               updateTimeline={state.updateTimeline}
               onTimerResume={timerStart}
               onTimerPause={timerPause}
+              library={state.library}
             />
           )}
         </>

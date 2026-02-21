@@ -35,9 +35,6 @@ export function PhaseSelect({
       );
       if (choice) {
         setActiveTrackId(trackId);
-        // Use the per-track persisted resumePhase if available (set whenever
-        // setPhase is called with a non-select phase). Falls back to a safe
-        // heuristic: listening if timeline has entries, ready otherwise.
         const nextPhase = ann.resumePhase ?? (ann.timeline.length > 0 ? 'listening' : 'ready');
         setPhase(nextPhase);
       } else {
@@ -131,6 +128,17 @@ export function PhaseSelect({
             </button>
           );
         })}
+      </div>
+
+      {/* Prompts & Tags management */}
+      <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+        <button
+          className="btn-ghost btn-small"
+          onClick={() => setPhase('prompts_tags')}
+          style={{ letterSpacing: '0.05em' }}
+        >
+          ◈ PROMPTS &amp; TAGS
+        </button>
       </div>
     </div>
   );

@@ -768,3 +768,598 @@ button {
     z-index: 10;
   }
 }
+/* ============================================================
+   PROMPTS & TAGS — index.css additions
+   Append to the bottom of src/index.css
+   ============================================================ */
+
+/* ── PhasePromptsTags — screen shell ─────────────────────────────────────── */
+
+.prompts-tags-screen {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.prompts-tags-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.prompts-tags-header h1 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  color: var(--text);
+  margin: 0;
+  flex: 1;
+}
+
+.prompts-tags-header .subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+/* ── Tab nav ──────────────────────────────────────────────────────────────── */
+
+.tab-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0 1.5rem;
+  overflow-x: auto;
+}
+
+.tab-nav-btn {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.tab-nav-btn:hover {
+  color: var(--text-muted);
+}
+
+.tab-nav-btn.active {
+  color: var(--amber);
+  border-bottom-color: var(--amber);
+}
+
+/* ── Tab content area ─────────────────────────────────────────────────────── */
+
+.tab-content {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Collapsible section ──────────────────────────────────────────────────── */
+
+.collapsible-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  transition: background var(--transition);
+}
+
+.collapsible-header:hover {
+  background: var(--surface-raised);
+}
+
+.collapsible-header h3 {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.collapsible-header .chevron {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  transition: transform var(--transition);
+}
+
+.collapsible-header .chevron.open {
+  transform: rotate(180deg);
+}
+
+.collapsible-body {
+  padding: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Tag chip grid ────────────────────────────────────────────────────────── */
+
+.tag-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+
+.tag-chip:hover {
+  border-color: var(--border-active);
+  color: var(--text);
+}
+
+.tag-chip.active {
+  background: var(--amber-bg);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.tag-chip.hidden-builtin {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.tag-chip .chip-remove {
+  font-size: 0.625rem;
+  color: var(--text-dim);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tag-chip .chip-remove:hover {
+  color: var(--error);
+}
+
+/* Tag type badges — small coloured dots */
+.tag-type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-type-dot.mood   { background: #a78bfa; }
+.tag-type-dot.genre  { background: var(--amber); }
+.tag-type-dot.energy { background: #34d399; }
+.tag-type-dot.custom { background: var(--text-dim); }
+
+/* ── Tag search input ─────────────────────────────────────────────────────── */
+
+.tag-search-wrap {
+  position: relative;
+  margin-bottom: 0.75rem;
+}
+
+.tag-search-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem 0.5rem 2rem;
+  outline: none;
+  transition: border-color var(--transition);
+  box-sizing: border-box;
+}
+
+.tag-search-input:focus {
+  border-color: var(--border-active);
+}
+
+.tag-search-icon {
+  position: absolute;
+  left: 0.625rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+/* ── Pack cards ───────────────────────────────────────────────────────────── */
+
+.pack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+
+.pack-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color var(--transition);
+}
+
+.pack-card.enabled {
+  border-color: var(--amber);
+  background: var(--amber-bg);
+}
+
+.pack-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pack-card-name {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pack-card-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.pack-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+/* Pack enable toggle */
+.pack-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.pack-toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  position: relative;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+
+.pack-toggle-track.on {
+  background: var(--amber);
+}
+
+.pack-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  transition: transform var(--transition);
+}
+
+.pack-toggle-track.on .pack-toggle-thumb {
+  transform: translateX(16px);
+}
+
+/* ── Phrase builder ───────────────────────────────────────────────────────── */
+
+.phrase-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.phrase-builder-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.phrase-builder-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.phrase-builder-input {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.375rem 0.625rem;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--transition);
+}
+
+.phrase-builder-input:focus {
+  border-color: var(--border-active);
+}
+
+.phrase-preview {
+  font-family: var(--font-serif);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.5rem 0.625rem;
+  border-left: 2px solid var(--amber);
+  margin-top: 0.25rem;
+  min-height: 1.5rem;
+}
+
+.phrase-preview.empty {
+  color: var(--text-dim);
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+/* ── Import tab ───────────────────────────────────────────────────────────── */
+
+.import-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.import-dropzone:hover,
+.import-dropzone.drag-over {
+  border-color: var(--amber);
+  background: var(--amber-bg);
+}
+
+.import-dropzone p {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  margin: 0.25rem 0;
+}
+
+.import-dropzone .import-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.import-result {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.import-result.success {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+
+.import-result.error {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+
+/* ── Undo toast ───────────────────────────────────────────────────────────── */
+
+.undo-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-pill);
+  padding: 0.5rem 1rem 0.5rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  z-index: 200;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  animation: toast-in 0.2s ease;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.undo-toast button {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--amber);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0.04em;
+}
+
+/* ── Mark entry — collapsible section type block ──────────────────────────── */
+
+.mark-section-type-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mark-section-type-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+
+/* ── Mark entry — structured tags block ───────────────────────────────────── */
+
+.mark-tags-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.625rem;
+  min-height: 28px;
+}
+
+.mark-tags-selected:empty::before {
+  content: 'No tags selected';
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  padding: 0.25rem 0;
+}
+
+.mark-tags-category-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin: 0.5rem 0 0.25rem;
+}
+
+/* ── Category group header within tag library ─────────────────────────────── */
+
+.category-group {
+  margin-bottom: 1.25rem;
+}
+
+.category-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.category-group-name {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.category-group-count {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-dim);
+}
+
+/* ── Add custom tag inline form ───────────────────────────────────────────── */
+
+.add-tag-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.add-tag-row input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.375rem 0.625rem;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.add-tag-row input:focus {
+  border-color: var(--border-active);
+}
+
+/* ── Phrase bank list ─────────────────────────────────────────────────────── */
+
+.phrase-bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+}
+
+.phrase-bank-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: var(--font-serif);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.phrase-bank-item-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}

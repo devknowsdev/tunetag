@@ -6,12 +6,31 @@ import type {
   MarkEntryDraft,
   GlobalAnalysis,
   TimelineEntry,
+  TagDef,
+  TagPack,
+  PhraseEntry,
+  PromptsTagsLibraryState,
+  UndoAction,
+  TagPackImport,
+  TagType,
 } from '../types';
 import { TRACKS } from '../lib/schema';
+import { BUILTIN_PACKS, BUILTIN_TAGS, DEFAULT_LIBRARY_STATE } from '../lib/tagPacks';
 
 const STORAGE_KEY = 'beatpulse_v1';
 const ANNOTATOR_KEY = 'beatpulse_annotator';
 const AUTOSAVE_DEBOUNCE_MS = 500;
+const UNDO_STACK_MAX = 100;
+
+// ─── Default state builders ───────────────────────────────────────────────────
+
+function makeDefaultLibrary(): PromptsTagsLibraryState {
+  return {
+    packs: BUILTIN_PACKS,
+    tags: BUILTIN_TAGS,
+    ...DEFAULT_LIBRARY_STATE,
+  };
+}
 
 function makeEmptyAnnotation(trackId: number, annotator: string): TrackAnnotation {
   const track = TRACKS.find((t) => t.id === trackId)!;
@@ -39,24 +58,58 @@ function makeDefaultAppState(): AppState {
     globalCategoryIndex: 0,
     globalOnSummary: false,
     timerRunning: false,
+    promptsTagsLibrary: makeDefaultLibrary(),
+    undoStack: [],
   };
 }
+
+// ─── Migration-safe loader ────────────────────────────────────────────────────
+// If saved state is missing new fields, fill them in from defaults so existing
+// sessions load without crashing.
 
 function loadSavedState(): AppState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AppState;
+    const parsed = JSON.parse(raw) as Partial<AppState>;
+    return {
+      ...makeDefaultAppState(),
+      ...parsed,
+      // Always re-merge library — ensures new builtin tags/packs appear
+      // even for users with saved sessions from before this version.
+      promptsTagsLibrary: {
+        ...makeDefaultLibrary(),
+        ...(parsed.promptsTagsLibrary ?? {}),
+        // Keep packs list fresh (builtins may have been updated)
+        packs: BUILTIN_PACKS,
+        // Merge builtin tags with any custom tags already saved
+        tags: mergeTagsWithSaved(parsed.promptsTagsLibrary?.tags),
+      },
+      undoStack: parsed.undoStack ?? [],
+    };
   } catch {
     return null;
   }
 }
 
+/**
+ * Merge saved custom tags with the current builtin seed, deduplicating by
+ * normalized label. Builtins win on metadata; custom tags are preserved.
+ */
+function mergeTagsWithSaved(savedTags?: TagDef[]): TagDef[] {
+  if (!savedTags || savedTags.length === 0) return BUILTIN_TAGS;
+  const builtinByNorm = new Map(BUILTIN_TAGS.map((t) => [t.normalized, t]));
+  const custom = savedTags.filter(
+    (t) => t.source === 'custom' && !builtinByNorm.has(t.normalized)
+  );
+  return [...BUILTIN_TAGS, ...custom];
+}
+
+// ─── Return type ──────────────────────────────────────────────────────────────
+
 export interface UseAnnotationStateReturn {
   appState: AppState;
   hasSavedState: boolean;
-  // FIX #2: returns the saved snapshot so the caller can read timer values
-  // synchronously in the same event handler, before React re-render propagates.
   resumeSavedState: () => AppState | null;
   discardSavedState: () => void;
 
@@ -91,7 +144,29 @@ export interface UseAnnotationStateReturn {
   ) => void;
   updateElapsedSeconds: (trackId: number, seconds: number) => void;
   resetTrack: (trackId: number) => void;
+
+  // ── Prompts & Tags library actions ──────────────────────────────────────────
+  library: PromptsTagsLibraryState;
+  addCustomTag: (label: string, type: TagType, category: string) => void;
+  hideBuiltinTag: (tagId: string) => void;
+  deleteCustomTag: (tagId: string) => void;
+  restoreHiddenTag: (tagId: string) => void;
+  togglePackEnabled: (packId: string) => void;
+  importTagPack: (raw: TagPackImport) => { added: number; merged: number; errors: string[] };
+  setSessionActiveTagIds: (trackId: number, tagIds: string[]) => void;
+  toggleSessionTag: (trackId: number, tagId: string) => void;
+  hideTagInSession: (trackId: number, tagId: string) => void;
+  addPhraseToBank: (text: string, source: PhraseEntry['source']) => void;
+  removePhraseFromBank: (phraseId: string) => void;
+  addCustomSectionType: (label: string) => void;
+
+  // ── Undo ────────────────────────────────────────────────────────────────────
+  undoStack: UndoAction[];
+  undoLastAction: () => void;
+  pushUndo: (action: Omit<UndoAction, 'id' | 'timestamp'>) => void;
 }
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useAnnotationState(): UseAnnotationStateReturn {
   const [appState, setAppStateRaw] = useState<AppState>(makeDefaultAppState);
@@ -106,8 +181,7 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     }
   }, []);
 
-  // Debounced autosave — keep a ref to the latest pending state so we can
-  // flush it immediately on page unload (FIX #10).
+  // ── Autosave (debounced + flush on unload) ───────────────────────────────
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSave = useRef<AppState | null>(null);
 
@@ -124,7 +198,6 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     }, AUTOSAVE_DEBOUNCE_MS);
   }, []);
 
-  // FIX #10: flush pending save on tab close / page navigation / unmount
   useEffect(() => {
     function flushSave() {
       if (pendingSave.current) {
@@ -141,7 +214,7 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     return () => {
       window.removeEventListener('pagehide', flushSave);
       window.removeEventListener('beforeunload', flushSave);
-      flushSave(); // also flush on component unmount (e.g. HMR reloads)
+      flushSave();
     };
   }, []);
 
@@ -156,9 +229,8 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     [persistState]
   );
 
-  // FIX #2: return the saved snapshot so the caller can read timer-related
-  // values (elapsedSeconds, timerRunning) synchronously in the same event
-  // handler, without waiting for a React re-render.
+  // ── Session resume / discard ─────────────────────────────────────────────
+
   const resumeSavedState = useCallback((): AppState | null => {
     const snapshot = savedOnLoad.current;
     if (snapshot) {
@@ -176,6 +248,8 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     savedOnLoad.current = null;
   }, []);
 
+  // ── Standard annotation actions (unchanged from original) ────────────────
+
   const setActiveTrackId = useCallback(
     (id: number | null) => setAppState((p) => ({ ...p, activeTrackId: id })),
     [setAppState]
@@ -184,8 +258,6 @@ export function useAnnotationState(): UseAnnotationStateReturn {
   const setPhase = useCallback(
     (phase: Phase) =>
       setAppState((p) => {
-        // Persist resumePhase on the active track so PhaseSelect can restore it.
-        // Only record non-select phases (there's no point resuming to 'select').
         if (phase !== 'select' && p.activeTrackId !== null) {
           const ann = p.annotations[p.activeTrackId];
           if (ann) {
@@ -225,8 +297,6 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     [setAppState]
   );
 
-  // FIX: setAnnotator updates both the separate persisted key AND all track
-  // annotations, so B2 always reflects the current annotator name on export.
   const setAnnotator = useCallback(
     (name: string) => {
       localStorage.setItem(ANNOTATOR_KEY, name);
@@ -292,7 +362,6 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     [setAppState]
   );
 
-  // FIX: elapsedSeconds written back to TrackAnnotation on every timer tick
   const updateElapsedSeconds = useCallback(
     (trackId: number, seconds: number) => {
       setAppState((p) => ({
@@ -325,10 +394,471 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     [setAppState]
   );
 
+  // ── Library helper ───────────────────────────────────────────────────────
+
+  const updateLibrary = useCallback(
+    (updater: (lib: PromptsTagsLibraryState) => PromptsTagsLibraryState) => {
+      setAppState((p) => ({
+        ...p,
+        promptsTagsLibrary: updater(p.promptsTagsLibrary),
+      }));
+    },
+    [setAppState]
+  );
+
+  // ── Undo ─────────────────────────────────────────────────────────────────
+
+  const pushUndo = useCallback(
+    (action: Omit<UndoAction, 'id' | 'timestamp'>) => {
+      setAppState((p) => {
+        const newAction: UndoAction = {
+          ...action,
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+        };
+        const stack = [newAction, ...p.undoStack].slice(0, UNDO_STACK_MAX);
+        return { ...p, undoStack: stack };
+      });
+    },
+    [setAppState]
+  );
+
+  const undoLastAction = useCallback(() => {
+    setAppState((p) => {
+      if (p.undoStack.length === 0) return p;
+      const [latest, ...rest] = p.undoStack;
+      const lib = p.promptsTagsLibrary;
+
+      // Apply the inverse operation based on action kind
+      let newLib = lib;
+
+      switch (latest.kind) {
+        case 'tag_hide_builtin': {
+          const { tagId } = latest.undoPayload as { tagId: string };
+          newLib = {
+            ...lib,
+            hiddenBuiltinTagIds: lib.hiddenBuiltinTagIds.filter((id) => id !== tagId),
+          };
+          break;
+        }
+        case 'tag_delete_custom': {
+          const { tag } = latest.undoPayload as { tag: TagDef };
+          newLib = { ...lib, tags: [...lib.tags, tag] };
+          break;
+        }
+        case 'tag_add_custom': {
+          const { tagId } = latest.undoPayload as { tagId: string };
+          newLib = { ...lib, tags: lib.tags.filter((t) => t.id !== tagId) };
+          break;
+        }
+        case 'pack_toggle': {
+          const { packId, wasEnabled } = latest.undoPayload as {
+            packId: string;
+            wasEnabled: boolean;
+          };
+          newLib = {
+            ...lib,
+            enabledPackIds: wasEnabled
+              ? [...lib.enabledPackIds, packId]
+              : lib.enabledPackIds.filter((id) => id !== packId),
+          };
+          break;
+        }
+        case 'pack_import': {
+          const { addedTagIds, addedPackId } = latest.undoPayload as {
+            addedTagIds: string[];
+            addedPackId: string | null;
+          };
+          newLib = {
+            ...lib,
+            tags: lib.tags.filter((t) => !addedTagIds.includes(t.id)),
+            packs: addedPackId
+              ? lib.packs.filter((pk) => pk.id !== addedPackId)
+              : lib.packs,
+          };
+          break;
+        }
+        case 'session_tag_toggle': {
+          const { trackId, prevActiveIds } = latest.undoPayload as {
+            trackId: number;
+            prevActiveIds: string[];
+          };
+          newLib = {
+            ...lib,
+            sessionActiveTagIdsByTrack: {
+              ...lib.sessionActiveTagIdsByTrack,
+              [trackId]: prevActiveIds,
+            },
+          };
+          break;
+        }
+        case 'phrase_add': {
+          const { phraseId } = latest.undoPayload as { phraseId: string };
+          newLib = {
+            ...lib,
+            phraseBank: lib.phraseBank.filter((ph) => ph.id !== phraseId),
+          };
+          break;
+        }
+        case 'phrase_remove': {
+          const { phrase } = latest.undoPayload as { phrase: PhraseEntry };
+          newLib = { ...lib, phraseBank: [...lib.phraseBank, phrase] };
+          break;
+        }
+        default:
+          break;
+      }
+
+      return { ...p, promptsTagsLibrary: newLib, undoStack: rest };
+    });
+  }, [setAppState]);
+
+  // ── Tag library actions ──────────────────────────────────────────────────
+
+  const addCustomTag = useCallback(
+    (label: string, type: TagType, category: string) => {
+      const normalized = label.trim().toLowerCase();
+      setAppState((p) => {
+        // Prevent duplicates
+        if (p.promptsTagsLibrary.tags.some((t) => t.normalized === normalized)) {
+          return p;
+        }
+        const newTag: TagDef = {
+          id: `custom_${crypto.randomUUID()}`,
+          label: label.trim(),
+          normalized,
+          type,
+          category,
+          source: 'custom',
+          packIds: [],
+        };
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `Add tag "${newTag.label}"`,
+          timestamp: Date.now(),
+          kind: 'tag_add_custom',
+          undoPayload: { tagId: newTag.id },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...p.promptsTagsLibrary,
+            tags: [...p.promptsTagsLibrary.tags, newTag],
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const hideBuiltinTag = useCallback(
+    (tagId: string) => {
+      setAppState((p) => {
+        const tag = p.promptsTagsLibrary.tags.find((t) => t.id === tagId);
+        if (!tag || tag.source !== 'builtin') return p;
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `Hide tag "${tag.label}"`,
+          timestamp: Date.now(),
+          kind: 'tag_hide_builtin',
+          undoPayload: { tagId },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...p.promptsTagsLibrary,
+            hiddenBuiltinTagIds: [...p.promptsTagsLibrary.hiddenBuiltinTagIds, tagId],
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const deleteCustomTag = useCallback(
+    (tagId: string) => {
+      setAppState((p) => {
+        const tag = p.promptsTagsLibrary.tags.find((t) => t.id === tagId);
+        if (!tag || tag.source !== 'custom') return p;
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `Delete tag "${tag.label}"`,
+          timestamp: Date.now(),
+          kind: 'tag_delete_custom',
+          undoPayload: { tag },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...p.promptsTagsLibrary,
+            tags: p.promptsTagsLibrary.tags.filter((t) => t.id !== tagId),
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const restoreHiddenTag = useCallback(
+    (tagId: string) => {
+      updateLibrary((lib) => ({
+        ...lib,
+        hiddenBuiltinTagIds: lib.hiddenBuiltinTagIds.filter((id) => id !== tagId),
+      }));
+    },
+    [updateLibrary]
+  );
+
+  const togglePackEnabled = useCallback(
+    (packId: string) => {
+      setAppState((p) => {
+        const wasEnabled = p.promptsTagsLibrary.enabledPackIds.includes(packId);
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `${wasEnabled ? 'Disable' : 'Enable'} pack "${packId}"`,
+          timestamp: Date.now(),
+          kind: 'pack_toggle',
+          undoPayload: { packId, wasEnabled },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...p.promptsTagsLibrary,
+            enabledPackIds: wasEnabled
+              ? p.promptsTagsLibrary.enabledPackIds.filter((id) => id !== packId)
+              : [...p.promptsTagsLibrary.enabledPackIds, packId],
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const importTagPack = useCallback(
+    (raw: TagPackImport): { added: number; merged: number; errors: string[] } => {
+      const errors: string[] = [];
+      const validTypes: TagType[] = [
+        'section', 'source', 'action', 'quality', 'mix', 'genre_marker', 'timing', 'custom',
+      ];
+
+      if (!raw.packId || !raw.label || !Array.isArray(raw.tags)) {
+        return { added: 0, merged: 0, errors: ['Invalid pack format.'] };
+      }
+
+      const addedTagIds: string[] = [];
+      let added = 0;
+      let merged = 0;
+
+      setAppState((p) => {
+        const lib = p.promptsTagsLibrary;
+        const existingNorms = new Map(lib.tags.map((t) => [t.normalized, t]));
+        const newTags: TagDef[] = [];
+
+        for (const row of raw.tags) {
+          if (!row.label || typeof row.label !== 'string') {
+            errors.push(`Skipped row — missing label.`);
+            continue;
+          }
+          const normalized = row.label.trim().toLowerCase();
+          const type: TagType = validTypes.includes(row.type as TagType)
+            ? (row.type as TagType)
+            : 'custom';
+
+          if (existingNorms.has(normalized)) {
+            // Merge: add packId to existing tag if not already there
+            const existing = existingNorms.get(normalized)!;
+            if (!existing.packIds.includes(raw.packId)) {
+              existing.packIds = [...existing.packIds, raw.packId];
+              merged++;
+            }
+          } else {
+            const newTag: TagDef = {
+              id: `imported_${crypto.randomUUID()}`,
+              label: row.label.trim(),
+              normalized,
+              type,
+              category: row.category ?? 'Imported',
+              source: 'custom',
+              packIds: [raw.packId],
+            };
+            newTags.push(newTag);
+            addedTagIds.push(newTag.id);
+            added++;
+          }
+        }
+
+        // Add new pack if it doesn't exist yet
+        const packExists = lib.packs.some((pk) => pk.id === raw.packId);
+        const newPacks = packExists
+          ? lib.packs
+          : [
+              ...lib.packs,
+              { id: raw.packId, label: raw.label, builtin: false },
+            ];
+
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `Import pack "${raw.label}" (+${added} tags)`,
+          timestamp: Date.now(),
+          kind: 'pack_import',
+          undoPayload: {
+            addedTagIds,
+            addedPackId: packExists ? null : raw.packId,
+          },
+        };
+
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...lib,
+            tags: [...lib.tags, ...newTags],
+            packs: newPacks,
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+
+      return { added, merged, errors };
+    },
+    [setAppState]
+  );
+
+  const setSessionActiveTagIds = useCallback(
+    (trackId: number, tagIds: string[]) => {
+      updateLibrary((lib) => ({
+        ...lib,
+        sessionActiveTagIdsByTrack: {
+          ...lib.sessionActiveTagIdsByTrack,
+          [trackId]: tagIds,
+        },
+      }));
+    },
+    [updateLibrary]
+  );
+
+  const toggleSessionTag = useCallback(
+    (trackId: number, tagId: string) => {
+      setAppState((p) => {
+        const lib = p.promptsTagsLibrary;
+        const prev = lib.sessionActiveTagIdsByTrack[trackId] ?? [];
+        const isActive = prev.includes(tagId);
+        const next = isActive ? prev.filter((id) => id !== tagId) : [...prev, tagId];
+        const tag = lib.tags.find((t) => t.id === tagId);
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `${isActive ? 'Deactivate' : 'Activate'} tag "${tag?.label ?? tagId}"`,
+          timestamp: Date.now(),
+          kind: 'session_tag_toggle',
+          undoPayload: { trackId, prevActiveIds: prev },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...lib,
+            sessionActiveTagIdsByTrack: {
+              ...lib.sessionActiveTagIdsByTrack,
+              [trackId]: next,
+            },
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const hideTagInSession = useCallback(
+    (trackId: number, tagId: string) => {
+      updateLibrary((lib) => ({
+        ...lib,
+        sessionHiddenTagIdsByTrack: {
+          ...lib.sessionHiddenTagIdsByTrack,
+          [trackId]: [...(lib.sessionHiddenTagIdsByTrack[trackId] ?? []), tagId],
+        },
+      }));
+    },
+    [updateLibrary]
+  );
+
+  const addPhraseToBank = useCallback(
+    (text: string, source: PhraseEntry['source']) => {
+      setAppState((p) => {
+        const newPhrase: PhraseEntry = {
+          id: crypto.randomUUID(),
+          text: text.trim(),
+          createdAt: Date.now(),
+          source,
+        };
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `Save phrase`,
+          timestamp: Date.now(),
+          kind: 'phrase_add',
+          undoPayload: { phraseId: newPhrase.id },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...p.promptsTagsLibrary,
+            phraseBank: [...p.promptsTagsLibrary.phraseBank, newPhrase],
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const removePhraseFromBank = useCallback(
+    (phraseId: string) => {
+      setAppState((p) => {
+        const phrase = p.promptsTagsLibrary.phraseBank.find((ph) => ph.id === phraseId);
+        if (!phrase) return p;
+        const newUndo: UndoAction = {
+          id: crypto.randomUUID(),
+          label: `Remove phrase`,
+          timestamp: Date.now(),
+          kind: 'phrase_remove',
+          undoPayload: { phrase },
+        };
+        return {
+          ...p,
+          promptsTagsLibrary: {
+            ...p.promptsTagsLibrary,
+            phraseBank: p.promptsTagsLibrary.phraseBank.filter((ph) => ph.id !== phraseId),
+          },
+          undoStack: [newUndo, ...p.undoStack].slice(0, UNDO_STACK_MAX),
+        };
+      });
+    },
+    [setAppState]
+  );
+
+  const addCustomSectionType = useCallback(
+    (label: string) => {
+      updateLibrary((lib) => {
+        const normalized = label.trim().toLowerCase();
+        if (lib.customSectionTypes.map((s) => s.toLowerCase()).includes(normalized)) {
+          return lib;
+        }
+        return { ...lib, customSectionTypes: [...lib.customSectionTypes, label.trim()] };
+      });
+    },
+    [updateLibrary]
+  );
+
+  // ── Derived values ───────────────────────────────────────────────────────
+
   const annotator =
     appState.activeTrackId !== null
       ? appState.annotations[appState.activeTrackId]?.annotator ?? ''
       : localStorage.getItem(ANNOTATOR_KEY) ?? '';
+
+  // ── Return ───────────────────────────────────────────────────────────────
 
   return {
     appState,
@@ -355,5 +885,21 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     setStatus,
     updateElapsedSeconds,
     resetTrack,
+    library: appState.promptsTagsLibrary,
+    addCustomTag,
+    hideBuiltinTag,
+    deleteCustomTag,
+    restoreHiddenTag,
+    togglePackEnabled,
+    importTagPack,
+    setSessionActiveTagIds,
+    toggleSessionTag,
+    hideTagInSession,
+    addPhraseToBank,
+    removePhraseFromBank,
+    addCustomSectionType,
+    undoStack: appState.undoStack,
+    undoLastAction,
+    pushUndo,
   };
 }
