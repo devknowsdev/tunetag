@@ -1,15 +1,15 @@
-# BeatPulse Annotator — Project Handover Doc
+# TuneTag Annotator — Project Handover Doc
 *Last updated: 21 February 2026*
 
 ---
 
 ## Project Overview
 
-**App:** BeatPulse Annotator  
+**App:** TuneTag Annotator  
 **Purpose:** Real-time audio annotation tool for music supervisors and sound editors. Annotate Spotify tracks with timestamped notes, record voice memos, export to Excel.  
 **Stack:** React + TypeScript + Vite  
 **Repo:** GitHub (main branch, always up to date)  
-**Live URL:** https://beatpulselab.devknowsdev.workers.dev/  
+**Live URL:** https://tunetag.devknowsdev.workers.dev/  
 **Hosting:** Cloudflare Pages (via Wrangler)  
 **Local dev:** `npm run dev` → http://127.0.0.1:5173  
 
@@ -18,8 +18,8 @@
 ## Key File Paths
 
 ```
-/Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator          ← live project
-/Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator BACKUP.zip ← original backup
+/Users/duif/DK APP DEV/TuneTag/tunetag-annotator          ← live project
+/Users/duif/DK APP DEV/TuneTag/tunetag-annotator BACKUP.zip ← original backup
 ```
 
 ### Source structure
@@ -146,7 +146,7 @@ Run these prompts one at a time, confirming `npx tsc --noEmit` clean after each.
 ## Spotify Developer Setup
 
 **Dashboard:** https://developer.spotify.com/dashboard  
-**App:** BeatPulse (existing — do NOT delete, 24hr creation limit applies)  
+**App:** TuneTag (existing — do NOT delete, 24hr creation limit applies)  
 
 **Settings to confirm:**
 - ✅ Web API — enabled
@@ -157,7 +157,7 @@ Run these prompts one at a time, confirming `npx tsc --noEmit` clean after each.
 
 **Redirect URIs to add:**
 ```
-https://beatpulselab.devknowsdev.workers.dev/callback
+https://tunetag.devknowsdev.workers.dev/callback
 http://127.0.0.1:5173/callback
 ```
 
@@ -167,14 +167,14 @@ http://127.0.0.1:5173/callback
 
 ## Cloudflare Deployment
 
-**Live URL:** https://beatpulselab.devknowsdev.workers.dev/  
+**Live URL:** https://tunetag.devknowsdev.workers.dev/  
 **Config file:** `wrangler.jsonc` in project root  
 **Deploy:** automatic on push to `main`, or retrigger from Cloudflare dashboard  
 
 `wrangler.jsonc` content:
 ```json
 {
-  "name": "beatpulse-annotator",
+  "name": "tunetag-annotator",
   "compatibility_date": "2026-02-21",
   "assets": {
     "directory": "./dist"
@@ -188,7 +188,7 @@ http://127.0.0.1:5173/callback
 
 ```bash
 # Navigate to project
-cd "/Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator"
+cd "/Users/duif/DK APP DEV/TuneTag/tunetag-annotator"
 
 # Run locally
 npm run dev
