@@ -3,7 +3,7 @@
 // FIX #9: SpeechRecognition cleanup on component unmount.
 // FIX #10: getUserMedia pre-flight before SpeechRecognition — ensures Chrome grants
 //          microphone access explicitly, fixing "Recording error: network".
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type {
   TrackAnnotation,
   Phase,
@@ -12,7 +12,9 @@ import type {
   RecordingEntry,
 } from '../types';
 import { MAX_TIMELINE_ROWS } from '../lib/schema';
-import { useKeyboardShortcuts, useMicMeter, useAudioDevices, useAudioRecorder, useDictation } from '../hooks';
+import { useKeyboardShortcuts, useAudioDevices } from '../hooks';
+import { useDictationFlow } from '../hooks/useDictationFlow';
+import { DictationOverlay, MicLevelMeter } from './DictationOverlay';
 import { RecordingsPanel, RecordingCard } from './RecordingsPanel';
 import { WaveformScrubber } from './WaveformScrubber';
 
@@ -46,305 +48,6 @@ function formatMSS(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// ── Dictation hook ─────────────────────────────────────────────────────────
-type DictationStatus =
-  | 'idle'
-  | 'awaiting_manual_pause'
-  | 'recording'
-  | 'finalizing'   // blob is being assembled after MediaRecorder.stop()
-  | 'audio_saved'  // shown for 2 s, then panel opens
-  | 'done'
-  | 'error';
-
-interface DictationState {
-  status: DictationStatus;
-  transcript: string;
-  capturedTimestamp: string;
-  capturedWasRunning: boolean;
-  noSpeechHint: boolean;   // true after 5 s of silence during recording
-  error?: string;
-}
-
-const INITIAL_DICTATION: DictationState = {
-  status: 'idle',
-  transcript: '',
-  capturedTimestamp: '',
-  capturedWasRunning: false,
-  noSpeechHint: false,
-};
-
-function useDictationFlow(
-  onComplete: (transcript: string, timestamp: string, wasRunning: boolean) => void,
-  onRecordingReady: (blob: Blob, mimeType: string, timestamp: string, transcript: string) => void,
-  onOpenRecordingsPanel: () => void,
-) {
-  const [state, setState] = useState<DictationState>(INITIAL_DICTATION);
-
-  // Stable ref so the recorder.onRecordingReady closure reads the latest timestamp
-  const capturedTsRef = useRef('');
-
-  const isSupported =
-    typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
-
-  // ── SpeechRecognition via hook ─────────────────────────────────────────────
-  const dictation = useDictation();
-
-  // ── MediaRecorder + mic stream via hook ────────────────────────────────────
-  const recorder = useAudioRecorder({
-    onRecordingReady: (blob, mimeType) => {
-      setState((p) => ({ ...p, status: 'finalizing' }));
-      onRecordingReady(blob, mimeType, capturedTsRef.current, dictation.finalTranscript);
-      setState((p) => ({ ...p, status: 'audio_saved' }));
-      setTimeout(() => {
-        setState(INITIAL_DICTATION);
-        dictation.reset();
-        onOpenRecordingsPanel();
-      }, 2000);
-    },
-  });
-
-  // Expose mic stream for MicLevelMeter (same contract as before)
-  const micStreamRef = useRef<MediaStream | null>(null);
-  useEffect(() => { micStreamRef.current = recorder.micStream; }, [recorder.micStream]);
-
-  // Mirror speech error into DictationState so the UI can show it
-  useEffect(() => {
-    if (dictation.error) {
-      setState((p) => ({ ...p, status: 'error', error: dictation.error ?? undefined }));
-    }
-  }, [dictation.error]);
-
-  // Mirror live transcript into DictationState.transcript
-  useEffect(() => {
-    setState((p) =>
-      p.status === 'recording'
-        ? { ...p, transcript: dictation.liveTranscript, noSpeechHint: dictation.noSpeechHint }
-        : p
-    );
-  }, [dictation.liveTranscript, dictation.noSpeechHint]);
-
-  function begin(capturedTimestamp: string, capturedWasRunning: boolean) {
-    setState({ ...INITIAL_DICTATION, status: 'awaiting_manual_pause', capturedTimestamp, capturedWasRunning });
-    dictation.reset();
-  }
-
-  async function startRecording() {
-    if (!isSupported) {
-      setState((p) => ({ ...p, status: 'error', error: 'Speech recognition not supported. Use Chrome or Edge.' }));
-      return;
-    }
-
-    capturedTsRef.current = state.capturedTimestamp;
-
-    const savedDeviceId = localStorage.getItem('tunetag_mic_device') ?? '';
-    const audioConstraint: MediaTrackConstraints | boolean = savedDeviceId
-      ? { deviceId: { exact: savedDeviceId } }
-      : true;
-
-    const result = await recorder.startRecording(audioConstraint);
-    if ('error' in result) {
-      if (savedDeviceId) localStorage.removeItem('tunetag_mic_device');
-      setState((p) => ({ ...p, status: 'error', error: result.error }));
-      return;
-    }
-
-    // SpeechRecognition — runs in parallel with MediaRecorder
-    dictation.startDictation(result.stream);
-    setState((p) => ({ ...p, status: 'recording', transcript: '', noSpeechHint: false }));
-  }
-
-  function stopRecording() {
-    dictation.stopDictation();
-    // Stop MediaRecorder via hook — its onstop fires finalizing → audio_saved → close
-    recorder.stopRecording();
-  }
-
-  function accept() {
-    const { capturedTimestamp, capturedWasRunning } = state;
-    onComplete(dictation.finalTranscript || state.transcript, capturedTimestamp, capturedWasRunning);
-    setState(INITIAL_DICTATION);
-    dictation.reset();
-  }
-
-  function cancel() {
-    dictation.stopDictation();
-    recorder.cancelRecording();
-    setState(INITIAL_DICTATION);
-    dictation.reset();
-  }
-
-  return { state, isSupported, begin, startRecording, stopRecording, accept, cancel, micStreamRef };
-}
-
-// ── Mic level meter ─────────────────────────────────────────────────────────
-// Reads RMS from an AnalyserNode on the mic stream and renders 20 bars.
-function MicLevelMeter({ stream }: { stream: MediaStream | null }) {
-  const barLevels = useMicMeter(stream);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx2d = canvas.getContext('2d');
-    if (!ctx2d) return;
-    const BAR_COUNT = barLevels.length;
-    const W = canvas.width;
-    const H = canvas.height;
-    ctx2d.clearRect(0, 0, W, H);
-    for (let i = 0; i < BAR_COUNT; i++) {
-      const avg = barLevels[i];
-      const barH = Math.max(2, avg * H);
-      const x = (i / BAR_COUNT) * W;
-      const barW = W / BAR_COUNT - 1;
-      ctx2d.fillStyle = avg > 0.05 ? 'rgba(8,32,48,0.8)' : 'rgba(8,32,48,0.2)';
-      ctx2d.fillRect(x, H - barH, barW, barH);
-    }
-  }, [barLevels]);
-
-  if (!stream) return null;
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={200}
-      height={32}
-      style={{
-        width: '100%',
-        height: '32px',
-        display: 'block',
-        borderRadius: '4px',
-        background: 'rgba(8,32,48,0.06)',
-        marginBottom: '0.75rem',
-      }}
-    />
-  );
-}
-
-// ── Dictation overlay ────────────────────────────────────────────────────────
-// Rendered identically in both classic and fullscreen layouts.
-interface DictationOverlayProps {
-  state: DictationState;
-  micStream: MediaStream | null;
-  micDevices: MediaDeviceInfo[];
-  selectedMicId: string;
-  setSelectedMicId: (id: string) => void;
-  onCancel: () => void;
-  onStartRecording: () => void;
-  onStopRecording: () => void;
-  onAccept: () => void;
-}
-
-function DictationOverlay({
-  state, micStream, micDevices, selectedMicId, setSelectedMicId,
-  onCancel, onStartRecording, onStopRecording, onAccept,
-}: DictationOverlayProps) {
-  if (state.status === 'idle') return null;
-
-  return (
-    <div className="dictation-overlay">
-      {state.status === 'awaiting_manual_pause' && (
-        <div className="dictation-card">
-          <p className="label" style={{ color: 'var(--amber)', marginBottom: '0.75rem' }}>🎙 DICTATE</p>
-          <p style={{ color: 'var(--text)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
-            Spotify can't be paused automatically — please pause your playback now,
-            then press <strong>Start Recording</strong>.
-          </p>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-            Timestamp captured: {state.capturedTimestamp}
-          </p>
-          <div style={{ marginBottom: '1.25rem' }}>
-            <label style={{
-              display: 'block', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
-              letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: '0.375rem',
-            }}>
-              MICROPHONE INPUT
-            </label>
-            <select
-              className="text-input"
-              value={selectedMicId}
-              onChange={(e) => setSelectedMicId(e.target.value)}
-              style={{ cursor: 'pointer', fontSize: '0.875rem' }}
-            >
-              <option value="">Default (system)</option>
-              {micDevices.map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn-ghost" onClick={onCancel}>Cancel</button>
-            <button className="btn-primary" onClick={onStartRecording}>● Start Recording</button>
-          </div>
-        </div>
-      )}
-
-      {state.status === 'recording' && (
-        <div className="dictation-card">
-          <p className="label" style={{ color: 'var(--error)', marginBottom: '0.5rem' }}>● RECORDING…</p>
-          <MicLevelMeter stream={micStream} />
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-dim)', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
-            LIVE TRANSCRIPT (BROWSER SPEECH RECOGNITION)
-          </p>
-          <p style={{ color: state.transcript ? 'var(--text)' : 'var(--text-muted)', minHeight: '3rem', fontFamily: 'var(--font-serif)', lineHeight: 1.6, marginBottom: '0.5rem' }}>
-            {state.transcript || 'Listening…'}
-          </p>
-          {state.noSpeechHint && !state.transcript && (
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-              Speak clearly into your microphone…
-            </p>
-          )}
-          <button className="btn-primary" onClick={onStopRecording}>■ Stop Recording</button>
-        </div>
-      )}
-
-      {state.status === 'finalizing' && (
-        <div className="dictation-card">
-          <p className="label" style={{ color: 'var(--amber)', marginBottom: '0.75rem' }}>⏳ FINALIZING RECORDING…</p>
-        </div>
-      )}
-
-      {state.status === 'audio_saved' && (
-        <div className="dictation-card">
-          <p className="label" style={{ color: 'var(--success)', marginBottom: '0.75rem' }}>AUDIO SAVED ✓</p>
-          {!state.transcript && (
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              Audio saved — no transcript captured
-            </p>
-          )}
-        </div>
-      )}
-
-      {state.status === 'done' && (
-        <div className="dictation-card">
-          <p className="label" style={{ color: 'var(--success)', marginBottom: '0.75rem' }}>✓ TRANSCRIPT READY</p>
-          <p style={{ color: 'var(--text)', fontFamily: 'var(--font-serif)', lineHeight: 1.6, marginBottom: '1rem' }}>
-            {state.transcript || <span style={{ color: 'var(--text-muted)' }}>Audio saved — no transcript captured</span>}
-          </p>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn-ghost" onClick={onCancel}>Discard</button>
-            <button className="btn-primary" disabled={!state.transcript} onClick={onAccept}>
-              Use Transcript →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {state.status === 'error' && (
-        <div className="dictation-card">
-          <p className="label" style={{ color: 'var(--error)', marginBottom: '0.75rem' }}>DICTATION ERROR</p>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>{state.error}</p>
-          <button className="btn-ghost" onClick={onCancel}>Dismiss</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ── PhaseListening ─────────────────────────────────────────────────────────
 export function PhaseListening({
   annotation,
   elapsedSeconds,
@@ -443,8 +146,8 @@ export function PhaseListening({
   }, [isActive, isTimerRunning, timerPause, timerStart]);
 
   // ── DICTATION ─────────────────────────────────────────────────────────────
-  const dictation = useDictationFlow(
-    (transcript, timestamp, capturedWasRunning) => {
+  const dictation = useDictationFlow({
+    onComplete: (transcript, timestamp, capturedWasRunning) => {
       setMarkEntryDraft({
         mode: 'new', timestamp, sectionType: '',
         narrative: transcript, narrativeRaw: transcript,
@@ -453,7 +156,7 @@ export function PhaseListening({
       });
       setPhase('mark_entry');
     },
-    (blob, mimeType, timestamp, transcript) => {
+    onRecordingReady: (blob, mimeType, timestamp, transcript) => {
       addRecording({
         id: crypto.randomUUID(),
         trackId: track.id,
@@ -466,8 +169,8 @@ export function PhaseListening({
         mimeType,
       });
     },
-    () => setOpenPanelTrigger((n) => n + 1),
-  );
+    onOpenRecordingsPanel: () => setOpenPanelTrigger((n) => n + 1),
+  });
 
   function handleDictateClick() {
     if (!isActive) return;

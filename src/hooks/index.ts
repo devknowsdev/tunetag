@@ -6,3 +6,4 @@ export { useAudioDevices } from './useAudioDevices';
 export { useKeyboardShortcuts } from './useKeyboardShortcuts';
 export { useSpotifyPlayer } from './useSpotifyPlayer';
 export { useTimer } from './useTimer';
+export { useDictationFlow } from './useDictationFlow';
